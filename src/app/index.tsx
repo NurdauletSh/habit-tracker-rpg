@@ -1,7 +1,20 @@
 import * as Haptics from 'expo-haptics';
-import { useEffect, useState } from 'react';
-import { Alert, FlatList, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { Alert, Animated, Dimensions, Easing, FlatList, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { supabase } from './supabase';
+
+const { width, height } = Dimensions.get('window');
+
+// Увеличиваем количество снежинок до 1000 для эпичного снегопада
+const SNOWFLAKES_COUNT = 50;
+const snowflakes = Array.from({ length: SNOWFLAKES_COUNT }).map(() => ({
+  id: Math.random(),
+  size: Math.floor(Math.random() * 12) + 8, // Разные размеры от маленьких до крупных
+  leftPos: Math.random() * width,
+  duration: Math.random() * 5000 + 3000, // Скорость падения
+  delay: Math.random() * 6000, // Плавное появление по времени
+  symbol: ['❄️', '❅', '❄', '٭'][Math.floor(Math.random() * 4)],
+}));
 
 export default function App() {
   const [session, setSession] = useState<any>(null);
@@ -17,8 +30,8 @@ export default function App() {
   const [xp, setXp] = useState(0);
   const [coins, setCoins] = useState(0);
   const [level, setLevel] = useState(1);
-  const [activeTheme, setActiveTheme] = useState<'default' | 'cyberpunk' | 'forest'>('default');
-  const [inventory, setInventory] = useState<string[]>(['default']);
+  const [activeTheme, setActiveTheme] = useState<'default' | 'cyberpunk' | 'forest' | 'newyear'>('newyear');
+  const [inventory, setInventory] = useState<string[]>(['default', 'newyear']);
   const [activeTab, setActiveTab] = useState<'habits' | 'shop' | 'achievements' | 'stats' | 'social' | 'notes'>('habits');
 
   const [noteText, setNoteText] = useState('');
@@ -33,7 +46,24 @@ export default function App() {
     { id: 'rich', title: '🪙 Накопитель', desc: 'Заработайте 50 монет', condition: () => coins >= 50 },
   ];
 
+  const snowAnims = useRef(snowflakes.map(() => new Animated.Value(0))).current;
+
   useEffect(() => {
+    snowAnims.forEach((anim, index) => {
+      const snowflake = snowflakes[index];
+      Animated.loop(
+        Animated.sequence([
+          Animated.delay(snowflake.delay),
+          Animated.timing(anim, {
+            toValue: 1,
+            duration: snowflake.duration,
+            easing: Easing.linear,
+            useNativeDriver: true,
+          }),
+        ])
+      ).start();
+    });
+
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       if (session) {
@@ -58,10 +88,10 @@ export default function App() {
 
   function generateAiMessage() {
     const hour = new Date().getHours();
-    let greeting = 'Отличный день для продуктивности!';
-    if (hour < 12) greeting = 'Доброе утро! Время зарядиться энергией и сделать первые шаги.';
-    else if (hour < 18) greeting = 'Экватор дня! Проверь свои квесты, чтобы не сбить победный стрик.';
-    else greeting = 'Вечерний рубеж! Заверши оставшиеся дела и закрепи успех.';
+    let greeting = '🎄 С наступающим Новым годом! Время творить чудеса.';
+    if (hour < 12) greeting = '❄️ Доброе морозное утро! Сделай шаг навстречу новогодней цели.';
+    else if (hour < 18) greeting = '🎁 Экватор дня! Твой новогодний стрик в безопасности?';
+    else greeting = '✨ Новогодний вечер! Подведи итоги и заслужи подарок от Деда Мороза.';
     setAiMotivation(greeting);
   }
 
@@ -81,7 +111,7 @@ export default function App() {
       Alert.alert('Ошибка регистрации', error.message);
     } else {
       await supabase.auth.signOut();
-      Alert.alert('Регистрация успешна! 🎉', 'Аккаунт создан. Войдите в систему.');
+      Alert.alert('Регистрация успешна! 🎄', 'Аккаунт создан. Войдите в систему.');
     }
     setLoading(false);
   }
@@ -128,15 +158,14 @@ export default function App() {
     }
   }
 
-  // Срабатывание вибрации при выполнении квеста
   async function toggleHabit(id: number, currentStatus: boolean, currentStreak: number) {
     const newStatus = !currentStatus;
     const newStreak = newStatus ? currentStreak + 1 : Math.max(0, currentStreak - 1);
 
     if (newStatus) {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success); // Приятная вибрация успеха
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } else {
-      Haptics.impactAsync(Haptics.ImpactFeedbackType.Light);
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
 
     const { error } = await supabase.from('habits').update({ completed: newStatus, streak: newStreak }).eq('id', id);
@@ -152,7 +181,7 @@ export default function App() {
   }
 
   async function deleteHabit(id: number) {
-    Haptics.impactAsync(Haptics.ImpactFeedbackType.Medium);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     const { error } = await supabase.from('habits').delete().eq('id', id);
     if (!error) {
       setHabits(habits.filter((habit) => habit.id !== id));
@@ -180,7 +209,7 @@ export default function App() {
     }
   }
 
-  function buyTheme(themeName: 'cyberpunk' | 'forest', cost: number) {
+  function buyTheme(themeName: 'cyberpunk' | 'forest' | 'newyear', cost: number) {
     if (coins < cost) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       Alert.alert('Недостаточно монет! 🪙');
@@ -196,6 +225,7 @@ export default function App() {
   const getThemeStyles = () => {
     if (activeTheme === 'cyberpunk') return { bg: '#0f172a', cardBg: '#1e1b4b', text: '#38bdf8', button: '#a855f7', itemBg: '#312e81' };
     if (activeTheme === 'forest') return { bg: '#064e3b', cardBg: '#022c22', text: '#34d399', button: '#059669', itemBg: '#065f46' };
+    if (activeTheme === 'newyear') return { bg: '#082f49', cardBg: '#0c4a6e', text: '#38bdf8', button: '#e11d48', itemBg: '#075985' };
     return { bg: '#f8fafc', cardBg: '#1e293b', text: '#1e293b', button: '#6366f1', itemBg: '#fff' };
   };
 
@@ -205,24 +235,73 @@ export default function App() {
   if (!session) {
     return (
       <View style={styles.authContainer}>
-        <Text style={styles.header}>🔐 Вход в RPG-Трекер</Text>
+        <View style={styles.snowContainer} pointerEvents="none">
+          {snowflakes.map((snowflake, index) => {
+            const translateY = snowAnims[index].interpolate({
+              inputRange: [0, 1],
+              outputRange: [-50, height + 50],
+            });
+            const translateX = snowAnims[index].interpolate({
+              inputRange: [0, 0.5, 1],
+              outputRange: [0, 15, -15],
+            });
+            return (
+              <Animated.Text key={snowflake.id} style={[styles.snowflake, { left: snowflake.leftPos, fontSize: snowflake.size, transform: [{ translateY }, { translateX }] }]}>
+                {snowflake.symbol}
+              </Animated.Text>
+            );
+          })}
+        </View>
+
+        <Text style={styles.header}>🎄 Новогодний RPG-Трекер</Text>
         <TextInput style={styles.input} placeholder="Email" placeholderTextColor="#888" value={email} onChangeText={setEmail} autoCapitalize="none" />
         <TextInput style={styles.input} placeholder="Пароль" placeholderTextColor="#888" value={password} onChangeText={setPassword} secureTextEntry autoCapitalize="none" />
-        <TouchableOpacity style={styles.button} onPress={signIn} disabled={loading}><Text style={styles.buttonText}>Войти</Text></TouchableOpacity>
-        <TouchableOpacity style={[styles.button, styles.secondaryButton]} onPress={signUp} disabled={loading}><Text style={[styles.buttonText, { color: '#6366f1' }]}>Регистрация</Text></TouchableOpacity>
+        <TouchableOpacity style={styles.button} onPress={signIn} disabled={loading}><Text style={styles.buttonText}>Войти в сказку</Text></TouchableOpacity>
+        <TouchableOpacity style={[styles.button, styles.secondaryButton]} onPress={signUp} disabled={loading}><Text style={[styles.buttonText, { color: '#e11d48' }]}>Создать персонажа</Text></TouchableOpacity>
       </View>
     );
   }
 
   return (
     <View style={[styles.container, { backgroundColor: theme.bg }]}>
+      {activeTheme === 'newyear' && (
+        <View style={styles.snowContainer} pointerEvents="none">
+          {snowflakes.map((snowflake, index) => {
+            const translateY = snowAnims[index].interpolate({
+              inputRange: [0, 1],
+              outputRange: [-50, height + 50],
+            });
+            const translateX = snowAnims[index].interpolate({
+              inputRange: [0, 0.5, 1],
+              outputRange: [0, 15, -15],
+            });
+
+            return (
+              <Animated.Text
+                key={snowflake.id}
+                style={[
+                  styles.snowflake,
+                  {
+                    left: snowflake.leftPos,
+                    fontSize: snowflake.size,
+                    transform: [{ translateY }, { translateX }],
+                  },
+                ]}
+              >
+                {snowflake.symbol}
+              </Animated.Text>
+            );
+          })}
+        </View>
+      )}
+
       <View style={styles.topBar}>
-        <Text style={[styles.header, activeTheme !== 'default' && { color: '#fff' }]}>⚔️ RPG Трекер</Text>
+        <Text style={[styles.header, { color: activeTheme !== 'default' ? '#fff' : '#1e293b' }]}>🎄 Новогодний Трекер</Text>
         <TouchableOpacity onPress={signOut} style={styles.logoutBtn}><Text style={styles.logoutText}>Выход</Text></TouchableOpacity>
       </View>
 
       <View style={styles.aiCard}>
-        <Text style={styles.aiTitle}>🤖 ИИ-Мотиватор</Text>
+        <Text style={styles.aiTitle}>🎅 Новогодний Эльф</Text>
         <Text style={styles.aiText}>{aiMotivation}</Text>
       </View>
 
@@ -237,7 +316,7 @@ export default function App() {
 
       {activeTab === 'habits' && (
         <View style={{ flex: 1 }}>
-          <TextInput style={styles.input} placeholder="Новый квест..." placeholderTextColor="#888" value={newHabit} onChangeText={setNewHabit} />
+          <TextInput style={styles.input} placeholder="Новый новогодний квест..." placeholderTextColor="#888" value={newHabit} onChangeText={setNewHabit} />
           <TouchableOpacity style={[styles.button, { backgroundColor: theme.button }]} onPress={addHabit}><Text style={styles.buttonText}>Добавить квест</Text></TouchableOpacity>
 
           <FlatList
@@ -249,7 +328,7 @@ export default function App() {
                   {item.completed && <Text style={styles.checkmark}>✓</Text>}
                 </TouchableOpacity>
                 <View style={styles.habitInfo}>
-                  <Text style={[styles.habitText, item.completed && styles.completedText]}>{item.title}</Text>
+                  <Text style={[styles.habitText, activeTheme === 'newyear' && { color: '#fff' }, item.completed && styles.completedText]}>{item.title}</Text>
                   <Text style={styles.streakText}>🔥 Стрик: {item.streak || 0}</Text>
                 </View>
                 <TouchableOpacity onPress={() => { Haptics.selectionAsync(); setSelectedHabitId(item.id); setActiveTab('notes'); }}>
@@ -264,7 +343,10 @@ export default function App() {
 
       {activeTab === 'shop' && (
         <ScrollView style={{ flex: 1 }}>
-          <Text style={styles.sectionTitle}>🛒 Магазин (Баланс: 🪙 {coins})</Text>
+          <Text style={[styles.sectionTitle, activeTheme !== 'default' && { color: '#fff' }]}>🛒 Новогодний Магазин (Баланс: 🪙 {coins})</Text>
+          <TouchableOpacity style={styles.shopItem} onPress={() => buyTheme('newyear', 0)}>
+            <Text style={styles.shopTitle}>🎄 Тема «Новый год» (Бесплатно)</Text>
+          </TouchableOpacity>
           <TouchableOpacity style={styles.shopItem} onPress={() => buyTheme('cyberpunk', 30)}>
             <Text style={styles.shopTitle}>⚡ Тема «Киберпанк» (30 🪙)</Text>
           </TouchableOpacity>
@@ -279,7 +361,7 @@ export default function App() {
 
       {activeTab === 'achievements' && (
         <ScrollView style={{ flex: 1 }}>
-          <Text style={styles.sectionTitle}>🏆 Достижения</Text>
+          <Text style={[styles.sectionTitle, activeTheme !== 'default' && { color: '#fff' }]}>🏆 Новогодние Достижения</Text>
           {achievementsList.map((ach) => (
             <View key={ach.id} style={[styles.achCard, ach.condition(habits) ? styles.achUnlocked : styles.achLocked]}>
               <Text style={styles.achTitle}>{ach.title}</Text>
@@ -291,9 +373,9 @@ export default function App() {
 
       {activeTab === 'stats' && (
         <ScrollView style={{ flex: 1 }}>
-          <Text style={styles.sectionTitle}>📈 Тепловая карта активности</Text>
+          <Text style={[styles.sectionTitle, activeTheme !== 'default' && { color: '#fff' }]}>📈 Новогодняя теплокарта</Text>
           <View style={styles.heatmapCard}>
-            <Text style={styles.heatSubtitle}>Ваша продуктивность за текущую сессию:</Text>
+            <Text style={styles.heatSubtitle}>Ваша праздничная активность:</Text>
             <View style={styles.gridRow}>
               {[...Array(28)].map((_, i) => (
                 <View key={i} style={[styles.heatBox, i < completedCount * 4 ? styles.heatActive : styles.heatInactive]} />
@@ -306,12 +388,12 @@ export default function App() {
 
       {activeTab === 'social' && (
         <ScrollView style={{ flex: 1 }}>
-          <Text style={styles.sectionTitle}>👥 Командные Челленджи</Text>
+          <Text style={[styles.sectionTitle, activeTheme !== 'default' && { color: '#fff' }]}>👥 Новогодние Челленджи</Text>
           <TextInput style={styles.input} placeholder="Название челленджа..." placeholderTextColor="#888" value={newChallengeTitle} onChangeText={setNewChallengeTitle} />
           <TouchableOpacity style={[styles.button, { backgroundColor: theme.button }]} onPress={addChallenge}><Text style={styles.buttonText}>Создать челлендж</Text></TouchableOpacity>
           {challenges.map((c) => (
             <View key={c.id} style={styles.shopItem}>
-              <Text style={styles.shopTitle}>🎯 {c.title}</Text>
+              <Text style={styles.shopTitle}>🎁 {c.title}</Text>
               <Text style={styles.shopDesc}>Статус: Активен в Supabase</Text>
             </View>
           ))}
@@ -320,9 +402,9 @@ export default function App() {
 
       {activeTab === 'notes' && (
         <ScrollView style={{ flex: 1 }}>
-          <Text style={styles.sectionTitle}>📝 Дневник рефлексии</Text>
-          <Text style={{ fontSize: 12, color: '#64748b', marginBottom: 10 }}>Выбран ID привычки: {selectedHabitId || 'Не выбрана'}</Text>
-          <TextInput style={[styles.input, { height: 80 }]} placeholder="Напишите заметку к привычке..." placeholderTextColor="#888" multiline value={noteText} onChangeText={setNoteText} />
+          <Text style={[styles.sectionTitle, activeTheme !== 'default' && { color: '#fff' }]}>📝 Праздничный Дневник</Text>
+          <Text style={{ fontSize: 12, color: '#94a3b8', marginBottom: 10 }}>Выбран ID привычки: {selectedHabitId || 'Не выбрана'}</Text>
+          <TextInput style={[styles.input, { height: 80 }]} placeholder="Запишите новогоднее обещание или заметку..." placeholderTextColor="#888" multiline value={noteText} onChangeText={setNoteText} />
           <TouchableOpacity style={[styles.button, { backgroundColor: theme.button }]} onPress={addNote}><Text style={styles.buttonText}>Сохранить заметку</Text></TouchableOpacity>
         </ScrollView>
       )}
@@ -332,24 +414,26 @@ export default function App() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, paddingTop: 40, paddingHorizontal: 15 },
-  authContainer: { flex: 1, backgroundColor: '#fff', justifyContent: 'center', paddingHorizontal: 30 },
+  snowContainer: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 99, pointerEvents: 'none' },
+  snowflake: { position: 'absolute', opacity: 0.7 },
+  authContainer: { flex: 1, backgroundColor: '#082f49', justifyContent: 'center', paddingHorizontal: 30 },
   topBar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
   header: { fontSize: 20, fontWeight: 'bold' },
-  aiCard: { backgroundColor: '#e0f2fe', padding: 12, borderRadius: 10, marginBottom: 10, borderWidth: 1, borderColor: '#bae6fd' },
+  aiCard: { backgroundColor: '#bae6fd', padding: 12, borderRadius: 10, marginBottom: 10, borderWidth: 1, borderColor: '#7dd3fc' },
   aiTitle: { fontSize: 13, fontWeight: 'bold', color: '#0369a1', marginBottom: 2 },
   aiText: { fontSize: 12, color: '#0369a1' },
   navScroll: { maxHeight: 45, marginBottom: 10 },
   tabBtn: { paddingVertical: 6, paddingHorizontal: 12, borderRadius: 6, backgroundColor: '#e2e8f0', marginRight: 8, height: 35 },
-  activeTab: { backgroundColor: '#3b82f6' },
+  activeTab: { backgroundColor: '#e11d48' },
   tabText: { fontSize: 12, fontWeight: 'bold', color: '#334155' },
   input: { borderWidth: 1, borderColor: '#cbd5e1', borderRadius: 8, paddingHorizontal: 15, height: 42, backgroundColor: '#fff', marginBottom: 10 },
   button: { justifyContent: 'center', alignItems: 'center', paddingVertical: 10, borderRadius: 8, marginBottom: 10 },
   buttonText: { color: '#fff', fontWeight: 'bold', fontSize: 15 },
-  secondaryButton: { backgroundColor: 'transparent', borderWidth: 1, borderColor: '#6366f1' },
+  secondaryButton: { backgroundColor: 'transparent', borderWidth: 1, borderColor: '#e11d48' },
   logoutBtn: { paddingVertical: 5, paddingHorizontal: 10, backgroundColor: '#ef4444', borderRadius: 6 },
   logoutText: { color: '#fff', fontSize: 11, fontWeight: 'bold' },
-  habitItem: { flexDirection: 'row', alignItems: 'center', padding: 12, borderRadius: 10, marginBottom: 8, borderWidth: 1, borderColor: '#e2e8f0' },
-  checkbox: { width: 24, height: 24, borderWidth: 2, borderColor: '#6366f1', borderRadius: 6, justifyContent: 'center', alignItems: 'center', marginRight: 12 },
+  habitItem: { flexDirection: 'row', alignItems: 'center', padding: 12, borderRadius: 10, marginBottom: 8, borderWidth: 1, borderColor: '#cbd5e1' },
+  checkbox: { width: 24, height: 24, borderWidth: 2, borderColor: '#e11d48', borderRadius: 6, justifyContent: 'center', alignItems: 'center', marginRight: 12 },
   checkmark: { color: '#fff', fontWeight: 'bold' },
   habitInfo: { flex: 1 },
   habitText: { fontSize: 15, fontWeight: '500', color: '#1e293b' },
